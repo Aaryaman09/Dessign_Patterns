@@ -281,3 +281,449 @@ Do you have 5+ parameters?
 - Skip both if keyword arguments work fine
 
 **The pattern should make code significantly more readable and safer, not just "different."**
+
+
+# 🎯 The 5 Components Explained - Complete pizza example
+
+## 1️⃣ **Product** (What we've been using)
+
+The final immutable object being built.
+
+```python
+@dataclass(frozen=True)
+class Pizza:  # This is the PRODUCT
+    size: str
+    toppings: tuple
+```
+
+---
+
+## 2️⃣ **Builder Interface** (Abstract - defines contract)
+
+An abstract class/interface that defines **what methods** all builders must have.
+
+```python
+from abc import ABC, abstractmethod
+
+class PizzaBuilderInterface(ABC):  # BUILDER INTERFACE
+    """Defines the contract for all pizza builders"""
+  
+    @abstractmethod
+    def set_size(self, size):
+        pass
+  
+    @abstractmethod
+    def add_topping(self, topping):
+        pass
+  
+    @abstractmethod
+    def build(self) -> Pizza:
+        pass
+```
+
+---
+
+## 3️⃣ **Concrete Builder** (What we've been using)
+
+The actual implementation of the builder.
+
+```python
+class ItalianPizzaBuilder(PizzaBuilderInterface):  # CONCRETE BUILDER
+    """Concrete implementation for Italian-style pizza"""
+  
+    def __init__(self):
+        self._size = None
+        self._toppings = []
+  
+    def set_size(self, size):
+        self._size = size
+        return self
+  
+    def add_topping(self, topping):
+        self._toppings.append(topping)
+        return self
+  
+    def build(self) -> Pizza:
+        return Pizza(self._size, tuple(self._toppings))
+```
+
+---
+
+## 4️⃣ **Director** (NEW - Controls the building process)
+
+A class that **knows the recipe** - it controls **which methods to call and in what order**.
+
+```python
+class PizzaDirector:  # DIRECTOR
+    """Controls HOW to build different types of pizzas"""
+  
+    def __init__(self, builder: PizzaBuilderInterface):
+        self._builder = builder
+  
+    def make_margherita(self) -> Pizza:
+        """Director knows the RECIPE for Margherita"""
+        return (self._builder
+                .set_size("medium")
+                .add_topping("cheese")
+                .add_topping("tomato")
+                .add_topping("basil")
+                .build())
+  
+    def make_pepperoni(self) -> Pizza:
+        """Director knows the RECIPE for Pepperoni"""
+        return (self._builder
+                .set_size("large")
+                .add_topping("cheese")
+                .add_topping("pepperoni")
+                .build())
+  
+    def make_veggie(self) -> Pizza:
+        """Director knows the RECIPE for Veggie"""
+        return (self._builder
+                .set_size("medium")
+                .add_topping("cheese")
+                .add_topping("mushrooms")
+                .add_topping("peppers")
+                .add_topping("olives")
+                .build())
+```
+
+**Key Point:** The Director **encapsulates the construction logic**. It knows "to make a Margherita, you need medium size, cheese, tomato, and basil."
+
+---
+
+## 5️⃣ **Client** (Your application code)
+
+The code that **uses** the Director and Builder to create objects.
+
+```python
+# CLIENT CODE
+def main():  # This is the CLIENT
+    # Client creates a builder
+    builder = ItalianPizzaBuilder()
+  
+    # Client creates a director and gives it the builder
+    director = PizzaDirector(builder)
+  
+    # Client asks director to make specific pizzas
+    margherita = director.make_margherita()
+    pepperoni = director.make_pepperoni()
+  
+    print(margherita)
+    print(pepperoni)
+```
+
+---
+
+# 🔄 Complete Example with All 5 Components
+
+```python
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List
+
+# ============================================================================
+# 1. PRODUCT
+# ============================================================================
+
+@dataclass(frozen=True)
+class Pizza:
+    """The complex object being built"""
+    size: str
+    crust: str
+    toppings: tuple
+  
+    def __str__(self):
+        return f"{self.size} {self.crust} pizza with {', '.join(self.toppings)}"
+
+
+# ============================================================================
+# 2. BUILDER INTERFACE (Abstract)
+# ============================================================================
+
+class PizzaBuilder(ABC):
+    """Abstract interface - defines what ALL builders must implement"""
+  
+    @abstractmethod
+    def reset(self):
+        """Reset builder to start fresh"""
+        pass
+  
+    @abstractmethod
+    def set_size(self, size: str):
+        pass
+  
+    @abstractmethod
+    def set_crust(self, crust: str):
+        pass
+  
+    @abstractmethod
+    def add_topping(self, topping: str):
+        pass
+  
+    @abstractmethod
+    def build(self) -> Pizza:
+        pass
+
+
+# ============================================================================
+# 3. CONCRETE BUILDERS (Implementations)
+# ============================================================================
+
+class ItalianPizzaBuilder(PizzaBuilder):
+    """Concrete builder for Italian-style pizzas"""
+  
+    def __init__(self):
+        self.reset()
+  
+    def reset(self):
+        self._size = None
+        self._crust = "thin"  # Italian default
+        self._toppings = []
+  
+    def set_size(self, size: str):
+        self._size = size
+        return self
+  
+    def set_crust(self, crust: str):
+        self._crust = crust
+        return self
+  
+    def add_topping(self, topping: str):
+        self._toppings.append(topping)
+        return self
+  
+    def build(self) -> Pizza:
+        pizza = Pizza(self._size, self._crust, tuple(self._toppings))
+        self.reset()  # Reset for next pizza
+        return pizza
+
+
+class AmericanPizzaBuilder(PizzaBuilder):
+    """Concrete builder for American-style pizzas"""
+  
+    def __init__(self):
+        self.reset()
+  
+    def reset(self):
+        self._size = None
+        self._crust = "thick"  # American default
+        self._toppings = []
+  
+    def set_size(self, size: str):
+        self._size = size
+        return self
+  
+    def set_crust(self, crust: str):
+        self._crust = crust
+        return self
+  
+    def add_topping(self, topping: str):
+        self._toppings.append(topping)
+        return self
+  
+    def build(self) -> Pizza:
+        pizza = Pizza(self._size, self._crust, tuple(self._toppings))
+        self.reset()
+        return pizza
+
+
+# ============================================================================
+# 4. DIRECTOR (Controls the construction process)
+# ============================================================================
+
+class PizzaDirector:
+    """
+    Director knows the RECIPES.
+    It controls WHICH builder methods to call and in WHAT ORDER.
+    """
+  
+    def __init__(self, builder: PizzaBuilder):
+        self._builder = builder
+  
+    def change_builder(self, builder: PizzaBuilder):
+        """Can switch to a different builder"""
+        self._builder = builder
+  
+    def make_margherita(self) -> Pizza:
+        """Recipe for Margherita pizza"""
+        return (self._builder
+                .set_size("medium")
+                .add_topping("mozzarella")
+                .add_topping("tomato")
+                .add_topping("basil")
+                .build())
+  
+    def make_pepperoni(self) -> Pizza:
+        """Recipe for Pepperoni pizza"""
+        return (self._builder
+                .set_size("large")
+                .add_topping("mozzarella")
+                .add_topping("pepperoni")
+                .build())
+  
+    def make_supreme(self) -> Pizza:
+        """Recipe for Supreme pizza"""
+        return (self._builder
+                .set_size("large")
+                .add_topping("mozzarella")
+                .add_topping("pepperoni")
+                .add_topping("sausage")
+                .add_topping("mushrooms")
+                .add_topping("peppers")
+                .add_topping("onions")
+                .build())
+
+
+# ============================================================================
+# 5. CLIENT (Your application code)
+# ============================================================================
+
+def main():
+    """CLIENT CODE - Uses Director and Builders"""
+  
+    print("=" * 70)
+    print("FULL BUILDER PATTERN - All 5 Components")
+    print("=" * 70)
+  
+    # Client creates builders
+    italian_builder = ItalianPizzaBuilder()
+    american_builder = AmericanPizzaBuilder()
+  
+    # Client creates director with Italian builder
+    director = PizzaDirector(italian_builder)
+  
+    # ========================================================================
+    # Scenario 1: Italian-style pizzas
+    # ========================================================================
+    print("\n🇮🇹 ITALIAN STYLE PIZZAS")
+    print("-" * 70)
+  
+    margherita = director.make_margherita()
+    print(f"1. {margherita}")
+  
+    pepperoni = director.make_pepperoni()
+    print(f"2. {pepperoni}")
+  
+    # ========================================================================
+    # Scenario 2: Switch to American-style
+    # ========================================================================
+    print("\n🇺🇸 AMERICAN STYLE PIZZAS (Same recipes, different builder)")
+    print("-" * 70)
+  
+    director.change_builder(american_builder)  # Switch builder!
+  
+    margherita_american = director.make_margherita()
+    print(f"1. {margherita_american}")
+  
+    supreme_american = director.make_supreme()
+    print(f"2. {supreme_american}")
+  
+    # ========================================================================
+    # Scenario 3: Client can also use builder directly (without Director)
+    # ========================================================================
+    print("\n🔧 CLIENT USING BUILDER DIRECTLY (No Director)")
+    print("-" * 70)
+  
+    custom_pizza = (italian_builder
+                    .set_size("small")
+                    .set_crust("stuffed")
+                    .add_topping("cheese")
+                    .add_topping("pineapple")
+                    .add_topping("bacon")
+                    .build())
+  
+    print(f"Custom: {custom_pizza}")
+  
+    print("\n" + "=" * 70)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+# 📤 Output
+
+```
+======================================================================
+FULL BUILDER PATTERN - All 5 Components
+======================================================================
+
+🇮🇹 ITALIAN STYLE PIZZAS
+----------------------------------------------------------------------
+1. medium thin pizza with mozzarella, tomato, basil
+2. large thin pizza with mozzarella, pepperoni
+
+🇺🇸 AMERICAN STYLE PIZZAS (Same recipes, different builder)
+----------------------------------------------------------------------
+1. medium thick pizza with mozzarella, tomato, basil
+2. large thick pizza with mozzarella, pepperoni, sausage, mushrooms, peppers, onions
+
+🔧 CLIENT USING BUILDER DIRECTLY (No Director)
+----------------------------------------------------------------------
+Custom: small stuffed pizza with cheese, pineapple, bacon
+
+======================================================================
+```
+
+---
+
+# 🎯 Key Differences
+
+| **Component**         | **Role**      | **Example**                                 |
+| --------------------------- | ------------------- | ------------------------------------------------- |
+| **Product**           | Final object        | `Pizza`                                         |
+| **Builder Interface** | Contract (abstract) | `PizzaBuilder` (ABC)                            |
+| **Concrete Builder**  | Implementation      | `ItalianPizzaBuilder`, `AmericanPizzaBuilder` |
+| **Director**          | Knows recipes/order | `PizzaDirector.make_margherita()`               |
+| **Client**            | Uses everything     | `main()` function                               |
+
+---
+
+# 🤔 When Do You Need Director?
+
+## ✅ **Use Director When:**
+
+1. You have **standard recipes/configurations** that are reused
+2. You want to **hide complexity** from the client
+3. You want **one place** to change how products are built
+4. Multiple clients need the **same construction sequences**
+
+```python
+# WITH DIRECTOR - Client doesn't need to know the recipe
+director = PizzaDirector(builder)
+pizza = director.make_margherita()  # Simple!
+
+# WITHOUT DIRECTOR - Client must know the recipe
+pizza = (builder
+         .set_size("medium")
+         .add_topping("mozzarella")
+         .add_topping("tomato")
+         .add_topping("basil")
+         .build())  # Client knows too much!
+```
+
+## ❌ **Skip Director When:**
+
+1. Every object is **custom** (no standard recipes)
+2. Client needs **full control** over construction
+3. Adding Director is **overkill** for simple cases
+
+---
+
+# 📝 Summary
+
+**In my previous examples, I skipped Director because:**
+
+- Most modern Python code doesn't use it
+- It adds complexity for simple cases
+- Clients usually want direct control
+
+**But the slide is showing the FULL GoF pattern with:**
+
+- **Director** = Recipe keeper (knows how to build standard products)
+- **Client** = Your code that uses the pattern
+
+**Bottom line:** Director is optional. Use it only when you have **reusable construction recipes**.
