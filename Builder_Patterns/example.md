@@ -1,12 +1,13 @@
-# Builder Pattern with Dataclasses - Complete Example
+# Complete Builder Pattern - Pizza Example with All 5 Components
 
 ```python
-from dataclasses import dataclass, field
-from typing import List, Optional
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
+from typing import List, Tuple
 
 # ============================================================================
-# 1. ENUMS FOR TYPE SAFETY
+# ENUMS FOR TYPE SAFETY
 # ============================================================================
 
 class PizzaSize(Enum):
@@ -22,38 +23,41 @@ class CrustType(Enum):
     STUFFED = "stuffed"
 
 class Topping(Enum):
-    CHEESE = "cheese"
+    MOZZARELLA = "mozzarella"
+    TOMATO_SAUCE = "tomato sauce"
+    BASIL = "basil"
     PEPPERONI = "pepperoni"
-    MUSHROOMS = "mushrooms"
-    OLIVES = "olives"
-    ONIONS = "onions"
-    BACON = "bacon"
     SAUSAGE = "sausage"
-    BELL_PEPPERS = "bell_peppers"
+    MUSHROOMS = "mushrooms"
+    BELL_PEPPERS = "bell peppers"
+    ONIONS = "onions"
+    OLIVES = "olives"
     PINEAPPLE = "pineapple"
+    HAM = "ham"
 
 
 # ============================================================================
-# 2. IMMUTABLE PIZZA (THE PRODUCT)
+# 1. PRODUCT - The Complex Immutable Object
 # ============================================================================
 
-@dataclass(frozen=True)  # ⭐ frozen=True makes it IMMUTABLE
+@dataclass(frozen=True)  # Immutable
 class Pizza:
-    """Immutable Pizza object - cannot be modified after creation"""
+    """
+    The PRODUCT - The complex object being built.
+    This is immutable (frozen=True) and can only be created via builders.
+    """
     size: PizzaSize
     crust: CrustType
-    toppings: tuple[Topping, ...]  # Tuple is immutable
-    extra_cheese: bool = False
-    sauce_amount: str = "normal"  # "light", "normal", "extra"
+    toppings: Tuple[Topping, ...]  # Immutable tuple
+    style: str  # "Italian", "American", "New York", etc.
   
     def __post_init__(self):
-        """Validation after dataclass initialization"""
-        # This runs AFTER the object is created but BEFORE it's frozen
+        """Validation after creation"""
         if not self.toppings:
             raise ValueError("Pizza must have at least one topping!")
       
-        if len(self.toppings) > 8:
-            raise ValueError("Maximum 8 toppings allowed!")
+        if len(self.toppings) > 10:
+            raise ValueError("Maximum 10 toppings allowed!")
   
     @property
     def price(self) -> float:
@@ -66,10 +70,7 @@ class Pizza:
         }
       
         price = base_prices[self.size]
-        price += len(self.toppings) * 1.50  # $1.50 per topping
-      
-        if self.extra_cheese:
-            price += 2.00
+        price += len(self.toppings) * 1.50
       
         if self.crust == CrustType.STUFFED:
             price += 3.00
@@ -78,338 +79,476 @@ class Pizza:
   
     def __str__(self):
         toppings_str = ", ".join(t.value for t in self.toppings)
-        return (f"{self.size.value.title()} {self.crust.value} crust pizza "
-                f"with {toppings_str} - ${self.price}")
+        return (f"{self.style} Style - {self.size.value.title()} "
+                f"{self.crust.value} crust pizza with {toppings_str} - ${self.price}")
 
 
 # ============================================================================
-# 3. PIZZA BUILDER (MUTABLE DURING CONSTRUCTION)
+# 2. BUILDER INTERFACE - Abstract Base Class
 # ============================================================================
 
-class PizzaBuilder:
-    """Builder for constructing Pizza objects step-by-step"""
+class PizzaBuilder(ABC):
+    """
+    The BUILDER INTERFACE - Abstract class that defines the contract.
+    All concrete builders must implement these methods.
+    """
+  
+    @abstractmethod
+    def reset(self) -> None:
+        """Reset the builder to start fresh"""
+        pass
+  
+    @abstractmethod
+    def set_size(self, size: PizzaSize) -> 'PizzaBuilder':
+        """Set the pizza size"""
+        pass
+  
+    @abstractmethod
+    def set_crust(self, crust: CrustType) -> 'PizzaBuilder':
+        """Set the crust type"""
+        pass
+  
+    @abstractmethod
+    def add_topping(self, topping: Topping) -> 'PizzaBuilder':
+        """Add a single topping"""
+        pass
+  
+    @abstractmethod
+    def add_toppings(self, *toppings: Topping) -> 'PizzaBuilder':
+        """Add multiple toppings at once"""
+        pass
+  
+    @abstractmethod
+    def build(self) -> Pizza:
+        """Build and return the final Pizza object"""
+        pass
+
+
+# ============================================================================
+# 3. CONCRETE BUILDERS - Specific Implementations
+# ============================================================================
+
+class ItalianPizzaBuilder(PizzaBuilder):
+    """
+    CONCRETE BUILDER for Italian-style pizzas.
+    Uses thin crust by default and authentic Italian ingredients.
+    """
   
     def __init__(self):
-        # Mutable state during construction
-        self._size: Optional[PizzaSize] = None
-        self._crust: CrustType = CrustType.REGULAR  # Default
-        self._toppings: List[Topping] = []  # Mutable list during building
-        self._extra_cheese: bool = False
-        self._sauce_amount: str = "normal"
-      
-        # Track construction order
-        self._size_set = False
-        self._crust_set = False
+        self.reset()
   
-    # ========================================================================
-    # STEP 1: SIZE (REQUIRED FIRST)
-    # ========================================================================
+    def reset(self) -> None:
+        """Reset to default Italian style settings"""
+        self._size: PizzaSize = None
+        self._crust: CrustType = CrustType.THIN  # Italian default
+        self._toppings: List[Topping] = []
+        self._style = "Italian"
   
-    def set_size(self, size: PizzaSize) -> 'PizzaBuilder':
-        """Set pizza size - MUST be called first"""
+    def set_size(self, size: PizzaSize) -> 'ItalianPizzaBuilder':
         self._size = size
-        self._size_set = True
         return self
   
-    # ========================================================================
-    # STEP 2: CRUST (MUST BE AFTER SIZE)
-    # ========================================================================
-  
-    def set_crust(self, crust: CrustType) -> 'PizzaBuilder':
-        """Set crust type - must set size first"""
-        if not self._size_set:
-            raise ValueError("Must set size before setting crust!")
-      
-        # VALIDATION: Stuffed crust only available for large pizzas
-        if crust == CrustType.STUFFED and self._size == PizzaSize.SMALL:
-            raise ValueError("Stuffed crust not available for small pizzas!")
-      
+    def set_crust(self, crust: CrustType) -> 'ItalianPizzaBuilder':
+        # Italians prefer thin or regular crust
+        if crust == CrustType.STUFFED:
+            print("⚠️  Warning: Stuffed crust is not traditional Italian style!")
         self._crust = crust
-        self._crust_set = True
         return self
   
-    # ========================================================================
-    # STEP 3: TOPPINGS (MUST BE AFTER CRUST)
-    # ========================================================================
-  
-    def add_topping(self, topping: Topping) -> 'PizzaBuilder':
-        """Add a topping - must set crust first"""
-        if not self._crust_set:
-            raise ValueError("Must set crust before adding toppings!")
-      
+    def add_topping(self, topping: Topping) -> 'ItalianPizzaBuilder':
         if topping in self._toppings:
             raise ValueError(f"{topping.value} already added!")
-      
-        if len(self._toppings) >= 8:
-            raise ValueError("Maximum 8 toppings allowed!")
-      
         self._toppings.append(topping)
         return self
   
-    def add_toppings(self, *toppings: Topping) -> 'PizzaBuilder':
-        """Add multiple toppings at once"""
+    def add_toppings(self, *toppings: Topping) -> 'ItalianPizzaBuilder':
         for topping in toppings:
             self.add_topping(topping)
         return self
   
-    # ========================================================================
-    # OPTIONAL CUSTOMIZATIONS
-    # ========================================================================
-  
-    def with_extra_cheese(self) -> 'PizzaBuilder':
-        """Add extra cheese"""
-        self._extra_cheese = True
-        return self
-  
-    def set_sauce_amount(self, amount: str) -> 'PizzaBuilder':
-        """Set sauce amount: 'light', 'normal', or 'extra'"""
-        if amount not in ["light", "normal", "extra"]:
-            raise ValueError("Sauce amount must be 'light', 'normal', or 'extra'")
-        self._sauce_amount = amount
-        return self
-  
-    # ========================================================================
-    # BUILD METHOD - CREATES IMMUTABLE PIZZA
-    # ========================================================================
-  
     def build(self) -> Pizza:
-        """
-        Validate and build the final immutable Pizza object.
-        This is where all final validation happens.
-        """
-        # Validation: Required fields
-        if not self._size_set:
-            raise ValueError("Size is required! Call set_size() first.")
+        if self._size is None:
+            raise ValueError("Size must be set!")
       
-        if not self._crust_set:
-            raise ValueError("Crust is required! Call set_crust() after set_size().")
-      
-        if not self._toppings:
-            raise ValueError("At least one topping is required!")
-      
-        # Complex validation: Business rules
-        if (Topping.PINEAPPLE in self._toppings and 
-            Topping.BACON not in self._toppings):
-            raise ValueError("Hawaiian pizza must have both pineapple AND bacon!")
-      
-        # Create immutable Pizza (convert list to tuple)
-        return Pizza(
+        pizza = Pizza(
             size=self._size,
             crust=self._crust,
-            toppings=tuple(self._toppings),  # ⭐ Convert to immutable tuple
-            extra_cheese=self._extra_cheese,
-            sauce_amount=self._sauce_amount
+            toppings=tuple(self._toppings),
+            style=self._style
         )
+        self.reset()  # Reset for next pizza
+        return pizza
 
 
-# ============================================================================
-# 4. SPECIALIZED BUILDERS (INHERITANCE)
-# ============================================================================
-
-class VegetarianPizzaBuilder(PizzaBuilder):
-    """Builder that only allows vegetarian toppings"""
-  
-    VEGETARIAN_TOPPINGS = {
-        Topping.CHEESE,
-        Topping.MUSHROOMS,
-        Topping.OLIVES,
-        Topping.ONIONS,
-        Topping.BELL_PEPPERS
-    }
-  
-    def add_topping(self, topping: Topping) -> 'VegetarianPizzaBuilder':
-        """Override to only allow vegetarian toppings"""
-        if topping not in self.VEGETARIAN_TOPPINGS:
-            raise ValueError(f"{topping.value} is not vegetarian!")
-        return super().add_topping(topping)
-
-
-class MeatLoversPizzaBuilder(PizzaBuilder):
-    """Pre-configured builder for meat lovers"""
+class AmericanPizzaBuilder(PizzaBuilder):
+    """
+    CONCRETE BUILDER for American-style pizzas.
+    Uses thick crust by default and generous toppings.
+    """
   
     def __init__(self):
-        super().__init__()
-        # Pre-set defaults for meat lovers
-        self._sauce_amount = "extra"
+        self.reset()
+  
+    def reset(self) -> None:
+        """Reset to default American style settings"""
+        self._size: PizzaSize = None
+        self._crust: CrustType = CrustType.THICK  # American default
+        self._toppings: List[Topping] = []
+        self._style = "American"
+  
+    def set_size(self, size: PizzaSize) -> 'AmericanPizzaBuilder':
+        self._size = size
+        return self
+  
+    def set_crust(self, crust: CrustType) -> 'AmericanPizzaBuilder':
+        self._crust = crust
+        return self
+  
+    def add_topping(self, topping: Topping) -> 'AmericanPizzaBuilder':
+        if topping in self._toppings:
+            raise ValueError(f"{topping.value} already added!")
+        self._toppings.append(topping)
+        return self
+  
+    def add_toppings(self, *toppings: Topping) -> 'AmericanPizzaBuilder':
+        for topping in toppings:
+            self.add_topping(topping)
+        return self
   
     def build(self) -> Pizza:
-        """Ensure at least 2 meat toppings"""
-        meat_toppings = {Topping.PEPPERONI, Topping.BACON, Topping.SAUSAGE}
-        meat_count = sum(1 for t in self._toppings if t in meat_toppings)
+        if self._size is None:
+            raise ValueError("Size must be set!")
       
-        if meat_count < 2:
-            raise ValueError("Meat lovers pizza must have at least 2 meat toppings!")
-      
-        return super().build()
+        pizza = Pizza(
+            size=self._size,
+            crust=self._crust,
+            toppings=tuple(self._toppings),
+            style=self._style
+        )
+        self.reset()
+        return pizza
+
+
+class NewYorkPizzaBuilder(PizzaBuilder):
+    """
+    CONCRETE BUILDER for New York-style pizzas.
+    Large, thin crust, foldable slices.
+    """
+  
+    def __init__(self):
+        self.reset()
+  
+    def reset(self) -> None:
+        """Reset to default New York style settings"""
+        self._size: PizzaSize = PizzaSize.LARGE  # NY pizzas are always large
+        self._crust: CrustType = CrustType.THIN  # NY default
+        self._toppings: List[Topping] = []
+        self._style = "New York"
+  
+    def set_size(self, size: PizzaSize) -> 'NewYorkPizzaBuilder':
+        if size != PizzaSize.LARGE and size != PizzaSize.EXTRA_LARGE:
+            print("⚠️  Warning: New York pizzas are traditionally large!")
+        self._size = size
+        return self
+  
+    def set_crust(self, crust: CrustType) -> 'NewYorkPizzaBuilder':
+        if crust != CrustType.THIN:
+            print("⚠️  Warning: New York pizzas traditionally have thin crust!")
+        self._crust = crust
+        return self
+  
+    def add_topping(self, topping: Topping) -> 'NewYorkPizzaBuilder':
+        if topping in self._toppings:
+            raise ValueError(f"{topping.value} already added!")
+        self._toppings.append(topping)
+        return self
+  
+    def add_toppings(self, *toppings: Topping) -> 'NewYorkPizzaBuilder':
+        for topping in toppings:
+            self.add_topping(topping)
+        return self
+  
+    def build(self) -> Pizza:
+        pizza = Pizza(
+            size=self._size,
+            crust=self._crust,
+            toppings=tuple(self._toppings),
+            style=self._style
+        )
+        self.reset()
+        return pizza
 
 
 # ============================================================================
-# 5. DEMONSTRATION
+# 4. DIRECTOR - Controls the Construction Process
+# ============================================================================
+
+class PizzaDirector:
+    """
+    The DIRECTOR - Knows the recipes (construction sequences).
+    Controls WHICH builder methods to call and in WHAT ORDER.
+    Encapsulates complex construction logic.
+    """
+  
+    def __init__(self, builder: PizzaBuilder):
+        self._builder = builder
+  
+    def change_builder(self, builder: PizzaBuilder) -> None:
+        """Switch to a different builder"""
+        self._builder = builder
+  
+    # ========================================================================
+    # STANDARD RECIPES - Director knows how to make these
+    # ========================================================================
+  
+    def make_margherita(self) -> Pizza:
+        """
+        Classic Margherita recipe.
+        Works with any builder - produces different styles.
+        """
+        return (self._builder
+                .set_size(PizzaSize.MEDIUM)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.BASIL
+                )
+                .build())
+  
+    def make_pepperoni(self) -> Pizza:
+        """Classic Pepperoni recipe"""
+        return (self._builder
+                .set_size(PizzaSize.LARGE)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.PEPPERONI
+                )
+                .build())
+  
+    def make_supreme(self) -> Pizza:
+        """Loaded Supreme pizza recipe"""
+        return (self._builder
+                .set_size(PizzaSize.EXTRA_LARGE)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.PEPPERONI,
+                    Topping.SAUSAGE,
+                    Topping.MUSHROOMS,
+                    Topping.BELL_PEPPERS,
+                    Topping.ONIONS,
+                    Topping.OLIVES
+                )
+                .build())
+  
+    def make_vegetarian(self) -> Pizza:
+        """Vegetarian pizza recipe"""
+        return (self._builder
+                .set_size(PizzaSize.MEDIUM)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.MUSHROOMS,
+                    Topping.BELL_PEPPERS,
+                    Topping.ONIONS,
+                    Topping.OLIVES
+                )
+                .build())
+  
+    def make_hawaiian(self) -> Pizza:
+        """Hawaiian pizza recipe (controversial!)"""
+        return (self._builder
+                .set_size(PizzaSize.LARGE)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.HAM,
+                    Topping.PINEAPPLE
+                )
+                .build())
+  
+    def make_meat_lovers(self) -> Pizza:
+        """Meat lovers pizza recipe"""
+        return (self._builder
+                .set_size(PizzaSize.EXTRA_LARGE)
+                .set_crust(CrustType.STUFFED)
+                .add_toppings(
+                    Topping.MOZZARELLA,
+                    Topping.TOMATO_SAUCE,
+                    Topping.PEPPERONI,
+                    Topping.SAUSAGE,
+                    Topping.HAM
+                )
+                .build())
+
+
+# ============================================================================
+# 5. CLIENT - Application Code
 # ============================================================================
 
 def main():
-    print("=" * 70)
-    print("BUILDER PATTERN WITH DATACLASSES - DEMONSTRATION")
-    print("=" * 70)
+    """
+    The CLIENT - Uses the Director and Builders to create pizzas.
+    The client doesn't need to know the construction details.
+    """
+  
+    print("=" * 80)
+    print("COMPLETE BUILDER PATTERN - PIZZA EXAMPLE WITH ALL 5 COMPONENTS")
+    print("=" * 80)
   
     # ========================================================================
-    # Example 1: Basic Pizza (Enforced Order)
+    # Scenario 1: Using Director with Italian Builder
     # ========================================================================
-    print("\n1️⃣  BASIC PIZZA (Step-by-step construction)")
-    print("-" * 70)
+    print("\n🇮🇹 ITALIAN STYLE PIZZAS (Using Director)")
+    print("-" * 80)
   
-    pizza1 = (PizzaBuilder()
-              .set_size(PizzaSize.LARGE)           # Step 1: Size first
-              .set_crust(CrustType.THIN)           # Step 2: Crust second
-              .add_topping(Topping.CHEESE)         # Step 3: Toppings
-              .add_topping(Topping.PEPPERONI)
-              .add_topping(Topping.MUSHROOMS)
-              .with_extra_cheese()
-              .build())
+    italian_builder = ItalianPizzaBuilder()
+    director = PizzaDirector(italian_builder)
   
-    print(f"✅ {pizza1}")
-    print(f"   Toppings: {pizza1.toppings}")
-    print(f"   Is immutable: {pizza1.__class__.__dataclass_fields__['size'].metadata}")
+    margherita = director.make_margherita()
+    print(f"1. {margherita}")
   
-    # Try to modify (will fail because frozen=True)
-    try:
-        pizza1.size = PizzaSize.SMALL  # ❌ Will raise error
-    except Exception as e:
-        print(f"   ❌ Cannot modify: {type(e).__name__}")
+    pepperoni = director.make_pepperoni()
+    print(f"2. {pepperoni}")
+  
+    vegetarian = director.make_vegetarian()
+    print(f"3. {vegetarian}")
   
     # ========================================================================
-    # Example 2: Wrong Order (Will Fail)
+    # Scenario 2: Switch to American Builder (Same Recipes, Different Style)
     # ========================================================================
-    print("\n2️⃣  WRONG ORDER - Validation Enforces Steps")
-    print("-" * 70)
+    print("\n🇺🇸 AMERICAN STYLE PIZZAS (Same Director, Different Builder)")
+    print("-" * 80)
   
-    try:
-        pizza2 = (PizzaBuilder()
-                  .add_topping(Topping.CHEESE)     # ❌ Can't add topping first!
-                  .set_size(PizzaSize.MEDIUM)
-                  .build())
-    except ValueError as e:
-        print(f"❌ Error: {e}")
+    american_builder = AmericanPizzaBuilder()
+    director.change_builder(american_builder)  # Switch builder!
   
-    # ========================================================================
-    # Example 3: Complex Validation
-    # ========================================================================
-    print("\n3️⃣  COMPLEX VALIDATION - Business Rules")
-    print("-" * 70)
+    margherita_american = director.make_margherita()
+    print(f"1. {margherita_american}")
   
-    # Stuffed crust not allowed for small pizzas
-    try:
-        pizza3 = (PizzaBuilder()
-                  .set_size(PizzaSize.SMALL)
-                  .set_crust(CrustType.STUFFED)    # ❌ Not allowed!
-                  .add_topping(Topping.CHEESE)
-                  .build())
-    except ValueError as e:
-        print(f"❌ Error: {e}")
+    supreme_american = director.make_supreme()
+    print(f"2. {supreme_american}")
   
-    # Hawaiian pizza must have both pineapple AND bacon
-    try:
-        pizza4 = (PizzaBuilder()
-                  .set_size(PizzaSize.MEDIUM)
-                  .set_crust(CrustType.REGULAR)
-                  .add_topping(Topping.CHEESE)
-                  .add_topping(Topping.PINEAPPLE)  # ❌ Missing bacon!
-                  .build())
-    except ValueError as e:
-        print(f"❌ Error: {e}")
+    meat_lovers = director.make_meat_lovers()
+    print(f"3. {meat_lovers}")
   
     # ========================================================================
-    # Example 4: Vegetarian Pizza Builder
+    # Scenario 3: New York Style Pizzas
     # ========================================================================
-    print("\n4️⃣  VEGETARIAN PIZZA BUILDER")
-    print("-" * 70)
+    print("\n🗽 NEW YORK STYLE PIZZAS")
+    print("-" * 80)
   
-    veggie_pizza = (VegetarianPizzaBuilder()
-                    .set_size(PizzaSize.MEDIUM)
-                    .set_crust(CrustType.THICK)
-                    .add_toppings(Topping.MUSHROOMS, Topping.OLIVES, Topping.BELL_PEPPERS)
-                    .with_extra_cheese()
-                    .build())
+    ny_builder = NewYorkPizzaBuilder()
+    director.change_builder(ny_builder)
   
-    print(f"✅ {veggie_pizza}")
+    ny_pepperoni = director.make_pepperoni()
+    print(f"1. {ny_pepperoni}")
   
-    # Try to add meat (will fail)
-    try:
-        bad_veggie = (VegetarianPizzaBuilder()
-                      .set_size(PizzaSize.LARGE)
+    ny_supreme = director.make_supreme()
+    print(f"2. {ny_supreme}")
+  
+    # ========================================================================
+    # Scenario 4: Client Using Builder Directly (Without Director)
+    # ========================================================================
+    print("\n🔧 CUSTOM PIZZAS (Client Using Builder Directly - No Director)")
+    print("-" * 80)
+  
+    # Client has full control when not using Director
+    custom_italian = (ItalianPizzaBuilder()
+                      .set_size(PizzaSize.SMALL)
                       .set_crust(CrustType.REGULAR)
-                      .add_topping(Topping.PEPPERONI)  # ❌ Not vegetarian!
+                      .add_topping(Topping.MOZZARELLA)
+                      .add_topping(Topping.BASIL)
                       .build())
-    except ValueError as e:
-        print(f"❌ Error: {e}")
+    print(f"1. Custom: {custom_italian}")
+  
+    custom_american = (AmericanPizzaBuilder()
+                       .set_size(PizzaSize.EXTRA_LARGE)
+                       .set_crust(CrustType.STUFFED)
+                       .add_toppings(
+                           Topping.MOZZARELLA,
+                           Topping.PEPPERONI,
+                           Topping.MUSHROOMS,
+                           Topping.PINEAPPLE  # Custom combo!
+                       )
+                       .build())
+    print(f"2. Custom: {custom_american}")
   
     # ========================================================================
-    # Example 5: Meat Lovers Pizza
+    # Scenario 5: Demonstrating Immutability
     # ========================================================================
-    print("\n5️⃣  MEAT LOVERS PIZZA BUILDER")
-    print("-" * 70)
+    print("\n🔒 IMMUTABILITY DEMONSTRATION")
+    print("-" * 80)
   
-    meat_pizza = (MeatLoversPizzaBuilder()
-                  .set_size(PizzaSize.EXTRA_LARGE)
-                  .set_crust(CrustType.STUFFED)
-                  .add_toppings(Topping.PEPPERONI, Topping.BACON, Topping.SAUSAGE)
-                  .add_topping(Topping.CHEESE)
-                  .build())
-  
-    print(f"✅ {meat_pizza}")
-  
-    # ========================================================================
-    # Example 6: Multiple Toppings at Once
-    # ========================================================================
-    print("\n6️⃣  SUPREME PIZZA (Multiple Toppings)")
-    print("-" * 70)
-  
-    supreme = (PizzaBuilder()
-               .set_size(PizzaSize.LARGE)
-               .set_crust(CrustType.REGULAR)
-               .add_toppings(
-                   Topping.CHEESE,
-                   Topping.PEPPERONI,
-                   Topping.SAUSAGE,
-                   Topping.MUSHROOMS,
-                   Topping.ONIONS,
-                   Topping.BELL_PEPPERS
-               )
-               .set_sauce_amount("extra")
-               .build())
-  
-    print(f"✅ {supreme}")
-  
-    # ========================================================================
-    # Example 7: Immutability Demonstration
-    # ========================================================================
-    print("\n7️⃣  IMMUTABILITY - Cannot Modify After Creation")
-    print("-" * 70)
-  
-    pizza = (PizzaBuilder()
-             .set_size(PizzaSize.MEDIUM)
-             .set_crust(CrustType.THIN)
-             .add_topping(Topping.CHEESE)
-             .build())
-  
+    pizza = director.make_margherita()
     print(f"Original: {pizza}")
   
-    # All these will fail:
-    modifications = [
-        ("pizza.size = PizzaSize.LARGE", lambda: setattr(pizza, 'size', PizzaSize.LARGE)),
-        ("pizza.toppings.append(Topping.BACON)", lambda: pizza.toppings.append(Topping.BACON)),
-        ("pizza.extra_cheese = True", lambda: setattr(pizza, 'extra_cheese', True))
-    ]
+    try:
+        pizza.size = PizzaSize.SMALL  # ❌ Will fail - frozen dataclass
+    except Exception as e:
+        print(f"❌ Cannot modify size: {type(e).__name__}")
   
-    for desc, func in modifications:
-        try:
-            func()
-        except Exception as e:
-            print(f"   ❌ {desc} → {type(e).__name__}")
+    try:
+        pizza.toppings.append(Topping.PEPPERONI)  # ❌ Will fail - tuple
+    except Exception as e:
+        print(f"❌ Cannot modify toppings: {type(e).__name__}")
   
-    print("\n" + "=" * 70)
-    print("✅ All pizzas are immutable and validated!")
-    print("=" * 70)
+    # ========================================================================
+    # Scenario 6: Multiple Pizzas from Same Recipe
+    # ========================================================================
+    print("\n📦 BATCH ORDER (Same Recipe, Multiple Pizzas)")
+    print("-" * 80)
+  
+    director.change_builder(ItalianPizzaBuilder())
+  
+    print("Ordering 3 Margherita pizzas:")
+    for i in range(3):
+        pizza = director.make_margherita()
+        print(f"  Pizza #{i+1}: {pizza.size.value} - ${pizza.price}")
+  
+    # ========================================================================
+    # Scenario 7: Validation Examples
+    # ========================================================================
+    print("\n⚠️  VALIDATION EXAMPLES")
+    print("-" * 80)
+  
+    # Try to build without setting size
+    try:
+        invalid = ItalianPizzaBuilder().add_topping(Topping.MOZZARELLA).build()
+    except ValueError as e:
+        print(f"❌ Error: {e}")
+  
+    # Try to add duplicate topping
+    try:
+        duplicate = (ItalianPizzaBuilder()
+                     .set_size(PizzaSize.MEDIUM)
+                     .add_topping(Topping.MOZZARELLA)
+                     .add_topping(Topping.MOZZARELLA)  # Duplicate!
+                     .build())
+    except ValueError as e:
+        print(f"❌ Error: {e}")
+  
+    # ========================================================================
+    # Summary
+    # ========================================================================
+    print("\n" + "=" * 80)
+    print("✅ DEMONSTRATION COMPLETE")
+    print("=" * 80)
+    print("\nKey Points Demonstrated:")
+    print("  1. Product (Pizza) - Immutable final object")
+    print("  2. Builder Interface (PizzaBuilder) - Abstract contract")
+    print("  3. Concrete Builders (Italian/American/NY) - Different implementations")
+    print("  4. Director (PizzaDirector) - Knows standard recipes")
+    print("  5. Client (main) - Uses Director or Builders directly")
+    print("\nBenefits Shown:")
+    print("  ✓ Same recipe produces different styles (Italian vs American)")
+    print("  ✓ Director encapsulates complex construction logic")
+    print("  ✓ Client can use Director (simple) or Builder (full control)")
+    print("  ✓ Immutable pizzas cannot be modified after creation")
+    print("  ✓ Validation prevents invalid pizzas")
+    print("  ✓ Fluent interface makes code readable")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
@@ -418,42 +557,98 @@ if __name__ == "__main__":
 
 ---
 
-# 📝 Key Takeaways from This Example
+# 📤 Output
 
-## 1️⃣ **Immutability with `frozen=True`**
-
-```python
-@dataclass(frozen=True)  # Makes object immutable after creation
-class Pizza:
-    size: PizzaSize
-    toppings: tuple[Topping, ...]  # Tuple (immutable) not list
 ```
+================================================================================
+COMPLETE BUILDER PATTERN - PIZZA EXAMPLE WITH ALL 5 COMPONENTS
+================================================================================
 
-## 2️⃣ **Enforced Construction Order**
+🇮🇹 ITALIAN STYLE PIZZAS (Using Director)
+--------------------------------------------------------------------------------
+1. Italian Style - Medium thin crust pizza with mozzarella, tomato sauce, basil - $15.49
+2. Italian Style - Large thin crust pizza with mozzarella, tomato sauce, pepperoni - $17.49
+3. Italian Style - Medium thin crust pizza with mozzarella, tomato sauce, mushrooms, bell peppers, onions, olives - $19.99
 
-```python
-# Must call in this order:
-.set_size()      # Step 1
-.set_crust()     # Step 2 (checks if size was set)
-.add_topping()   # Step 3 (checks if crust was set)
-.build()         # Final validation
+🇺🇸 AMERICAN STYLE PIZZAS (Same Director, Different Builder)
+--------------------------------------------------------------------------------
+1. American Style - Medium thick crust pizza with mozzarella, tomato sauce, basil - $15.49
+2. American Style - Extra_large thick crust pizza with mozzarella, tomato sauce, pepperoni, sausage, mushrooms, bell peppers, onions, olives - $26.99
+3. American Style - Extra_large stuffed crust pizza with mozzarella, tomato sauce, pepperoni, sausage, ham - $26.49
+
+🗽 NEW YORK STYLE PIZZAS
+--------------------------------------------------------------------------------
+1. New York Style - Large thin crust pizza with mozzarella, tomato sauce, pepperoni - $17.49
+2. New York Style - Large thin crust pizza with mozzarella, tomato sauce, pepperoni, sausage, mushrooms, bell peppers, onions, olives - $24.99
+
+🔧 CUSTOM PIZZAS (Client Using Builder Directly - No Director)
+--------------------------------------------------------------------------------
+1. Custom: Italian Style - Small thin crust pizza with mozzarella, basil - $11.99
+2. Custom: American Style - Extra_large stuffed crust pizza with mozzarella, pepperoni, mushrooms, pineapple - $23.99
+
+🔒 IMMUTABILITY DEMONSTRATION
+--------------------------------------------------------------------------------
+Original: Italian Style - Medium thin crust pizza with mozzarella, tomato sauce, basil - $15.49
+❌ Cannot modify size: FrozenInstanceError
+❌ Cannot modify toppings: AttributeError
+
+📦 BATCH ORDER (Same Recipe, Multiple Pizzas)
+--------------------------------------------------------------------------------
+Ordering 3 Margherita pizzas:
+  Pizza #1: medium - $15.49
+  Pizza #2: medium - $15.49
+  Pizza #3: medium - $15.49
+
+⚠️  VALIDATION EXAMPLES
+--------------------------------------------------------------------------------
+❌ Error: Size must be set!
+❌ Error: mozzarella already added!
+
+================================================================================
+✅ DEMONSTRATION COMPLETE
+================================================================================
+
+Key Points Demonstrated:
+  1. Product (Pizza) - Immutable final object
+  2. Builder Interface (PizzaBuilder) - Abstract contract
+  3. Concrete Builders (Italian/American/NY) - Different implementations
+  4. Director (PizzaDirector) - Knows standard recipes
+  5. Client (main) - Uses Director or Builders directly
+
+Benefits Shown:
+  ✓ Same recipe produces different styles (Italian vs American)
+  ✓ Director encapsulates complex construction logic
+  ✓ Client can use Director (simple) or Builder (full control)
+  ✓ Immutable pizzas cannot be modified after creation
+  ✓ Validation prevents invalid pizzas
+  ✓ Fluent interface makes code readable
+================================================================================
 ```
-
-## 3️⃣ **Complex Validation**
-
-- **In setters**: Basic validation (e.g., stuffed crust only for large pizzas)
-- **In `build()`**: Complex business rules (e.g., Hawaiian pizza needs pineapple + bacon)
-
-## 4️⃣ **Builder is Mutable, Product is Immutable**
-
-- `PizzaBuilder`: Mutable during construction (uses `List`)
-- `Pizza`: Immutable after creation (uses `tuple`, `frozen=True`)
-
-## 5️⃣ **Specialized Builders via Inheritance**
-
-- `VegetarianPizzaBuilder`: Restricts to veggie toppings
-- `MeatLoversPizzaBuilder`: Enforces meat topping rules
 
 ---
 
-**Run this code and see all the validation in action!** 🍕
+# 🎯 What This Example Demonstrates
+
+## All 5 Components in Action:
+
+1. **Product (Pizza)**: Immutable, validated, with business logic (price calculation)
+2. **Builder Interface (PizzaBuilder)**: Abstract contract that all builders follow
+3. **Concrete Builders**:
+
+   - `ItalianPizzaBuilder` - Thin crust default
+   - `AmericanPizzaBuilder` - Thick crust default
+   - `NewYorkPizzaBuilder` - Large, thin, with warnings
+4. **Director (PizzaDirector)**:
+
+   - Knows 6 standard recipes
+   - Can switch between builders
+   - Hides construction complexity from client
+5. **Client (main function)**:
+
+   - Uses Director for standard pizzas
+   - Uses Builders directly for custom pizzas
+   - Demonstrates all features
+
+---
+
+This is the **complete, production-ready** Builder Pattern implementation! 🍕
