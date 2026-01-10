@@ -58,9 +58,9 @@ In simpler terms: **Delegate object creation to subclasses.**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Creator                              │
+│                         Creator                             │
 │  (Abstract class with factory method)                       │
-│                                                              │
+│                                                             │
 │  + factory_method() -> Product  [ABSTRACT]                  │
 │  + some_operation()              [Uses factory_method()]    │
 └──────────────────┬──────────────────────────────────────────┘
